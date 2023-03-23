@@ -1,0 +1,59 @@
+---
+- hosts: all
+  become: true
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+
+    - name: Install Docker Compose
+      apt:
+        name: docker-compose
+        state: present
+
+    - name: Install Node Exporter
+      apt:
+        name: prometheus-node-exporter
+        state: present
+
+    - name: Create directories
+      file:
+        path: "{{ item.path }}"
+        owner: "{{ item.owner | default(omit) }}"
+        mode: "{{ item.mode | default('0750') }}"
+        state: directory
+      loop:
+        - { path: "/opt/monitoring" }
+        - { path: "/opt/monitoring/grafana/grafana_data", owner: 472 }
+        - { path: "/opt/monitoring/grafana/provisioning/dashboards", owner: 472 }
+        - { path: "/opt/monitoring/grafana/provisioning/datasources", owner: 472 }
+
+    - name: Install configurations
+      copy:
+        src: "grafana/provisioning/{{ item.folder }}/{{ item.name }}"
+        dest: "/opt/monitoring/grafana/provisioning/{{ item.folder }}/{{ item.name }}"
+        owner: "472"
+        group: root
+        mode: "0644"
+      loop:
+        - { name: dashboard.yml, folder: dashboards }
+        - { name: node-exporter-full_rev30.json, folder: dashboards }
+        - { name:  datasource.yml, folder: datasources }
+
+    - name: Install docker-compose configurations
+      copy:
+        src: "{{ item.name }}"
+        dest: "/opt/monitoring/{{ item.name }}"
+      loop:
+        - { name: prometheus.yml}
+        - { name: docker-compose.yml}
+
+    - name: Start docker-compose project
+      community.docker.docker_compose:
+        project_src: "/opt/monitoring"
+        state: present
